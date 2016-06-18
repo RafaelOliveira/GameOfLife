@@ -1,5 +1,3 @@
-// googledrive.com/host/0B9NwYQy46Xl5U0J6RHVfR0FYUmc 
-
 package;
 
 import kha.Color;
