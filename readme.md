@@ -9,4 +9,6 @@ render: it can be g1 or g2. In g1 the cell size is forced to 1, because g1 only 
 fps: The fps to run the game. The default is 60.
 
 Example:  
-www.sudoestegames.com/exp/gameoflife?size=10&fps=30
+www.sudoestegames.com/exp/gameoflife?size=8&fps=30
+
+TODO: Display the FPS.
