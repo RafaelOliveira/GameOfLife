@@ -31,10 +31,7 @@ class Main
 	{
 		setupParameters();
 		
-		#if (sys_windows || sys_linux || sys_osx)
-		desktopWidth = System.windowWidth();
-		desktopHeight = System.windowHeight();
-		#elseif (sys_html5 || sys_debug_html5)		
+		#if (sys_html5 || sys_debug_html5)		
 		var size = setupCanvas();
 		desktopWidth = size.x;
 		desktopHeight = size.y;
