@@ -1,9 +1,14 @@
 package;
 
+import kha.Assets;
 import kha.Color;
 import kha.Framebuffer;
 import kha.Scheduler;
 import kha.System;
+import kha.graphics2.Graphics;
+import kha.input.Keyboard;
+import kha.Key;
+import kha.input.Mouse;
 
 typedef Matrix = Array<Array<Bool>>;
 
@@ -15,42 +20,69 @@ class Project
 	var otherTable:Matrix;
 	var indexActive:Int;
 	
-	var cols:Int;
-	var lines:Int;
+	public var cols:Int;
+	public var lines:Int;
 	
 	var liveCells:Int;	
+	public var cellSize:Int;
+	public var ups:Int;	
+	
+	public var pause:Bool;
+	var updateTaskId:Int;	
+		
+	var fps:FramesPerSecond;
+	
+	var panel:Panel;
 	
 	public function new() 
-	{				
-		// choose the method using the size
-		if (Main.renderMethod == 0)
-		{
-			if (Main.size == 1)
-				System.notifyOnRender(renderWithG1);
-			else
-				System.notifyOnRender(renderWithG2);
-		}
-		// use g1 and force size = 1
-		else if (Main.renderMethod == 1)
-		{
-			Main.size = 1;
-			System.notifyOnRender(renderWithG1);
-		}
-		// use g2
-		else
-			System.notifyOnRender(renderWithG2);
-			
-		cols = Std.int(Main.desktopWidth / Main.size);
-		lines = Std.int(Main.desktopHeight / Main.size);
-		
-		setupTables();
-		createFirstGen();
-		
-		Scheduler.addTimeTask(update, 0, 1 / Main.fps);
+	{		
+		Assets.loadEverything(loadingFinished);
 	}
 	
-	inline function setupTables():Void
+	function loadingFinished():Void
 	{
+		panel = new Panel(this);
+		
+		pause = true;		
+		cellSize = 3;		
+		ups = 60;
+		
+		fps = new FramesPerSecond();
+		
+		System.notifyOnRender(render);
+		Keyboard.get().notify(keyDown, null);		
+			
+		setupTables();
+		createSeed();
+		
+		updateTaskId = Scheduler.addTimeTask(update, 0, 1 / ups);
+	}
+	
+	public function updateUps():Void
+	{
+		Scheduler.removeTimeTask(updateTaskId);
+		updateTaskId = Scheduler.addTimeTask(update, 0, 1 / ups);
+	}
+	
+	function keyDown(key:Key, char: String):Void
+	{
+		if (key == Key.TAB)
+			panel.show = !panel.show;
+	}
+	
+	public function setupTables():Void
+	{
+		if (cellSize == 1)
+		{
+			cols = Main.desktopWidth;
+			lines = Main.desktopHeight;			
+		}
+		else
+		{
+			cols = Std.int(Main.desktopWidth / cellSize);
+			lines = Std.int(Main.desktopHeight / cellSize);
+		}		
+		
 		table1 = new Matrix();
 		table2 = new Matrix();
 		
@@ -67,7 +99,19 @@ class Project
 		}
 	}
 	
-	inline function createFirstGen():Void
+	public function clearTables():Void
+	{
+		for (y in 0...lines)
+		{
+			for (x in 0...cols)
+			{				
+				table1[y][x] = false;
+				table2[y][x] = false;
+			}
+		}
+	}
+		
+	public function createSeed():Void
 	{
 		activeTable = table1;
 		otherTable = table2;
@@ -85,40 +129,45 @@ class Project
 
 	function update(): Void 
 	{
-		for (y in 0...lines)
+		if (!pause)
 		{
-			for (x in 0...cols)
+			for (y in 0...lines)
 			{
-				otherTable[y][x] = false;
-				calculateLiveCells(x, y);
-				
-				// live cell
-				if (activeTable[y][x])
+				for (x in 0...cols)
 				{
-					if (liveCells == 2 || liveCells == 3)
-						otherTable[y][x] = true;					
+					otherTable[y][x] = false;
+					calculateLiveCells(x, y);
+					
+					// live cell
+					if (activeTable[y][x])
+					{
+						if (liveCells == 2 || liveCells == 3)
+							otherTable[y][x] = true;					
+					}
+					// dead cell
+					else
+					{
+						if (liveCells == 3)
+							otherTable[y][x] = true;
+					}				
 				}
-				// dead cell
-				else
-				{
-					if (liveCells == 3)
-						otherTable[y][x] = true;
-				}				
 			}
+			
+			if (indexActive == 1)
+			{
+				activeTable = table2;
+				otherTable = table1;
+				indexActive = 2;
+			}
+			else
+			{
+				activeTable = table1;
+				otherTable = table2;
+				indexActive = 1;
+			}			
 		}
 		
-		if (indexActive == 1)
-		{
-			activeTable = table2;
-			otherTable = table1;
-			indexActive = 2;
-		}
-		else
-		{
-			activeTable = table1;
-			otherTable = table2;
-			indexActive = 1;
-		}
+		fps.update();
 	}
 
 	// Calculate the total of live neighbors cell
@@ -159,38 +208,53 @@ class Project
 			liveCells++;
 	}
 
-	function renderWithG2(framebuffer: Framebuffer): Void 
-	{
-		framebuffer.g2.begin();
-		
-		for (y in 0...lines)
+	function render(framebuffer:Framebuffer): Void 
+	{		
+		if (cellSize == 1)
 		{
-			for (x in 0...cols)
+			framebuffer.g1.begin();
+		
+			for (y in 0...lines)
 			{
-				if (activeTable[y][x])
-					framebuffer.g2.fillRect(x * Main.size, y * Main.size, Main.size, Main.size);
+				for (x in 0...cols)
+				{
+					if (activeTable[y][x])
+						framebuffer.g1.setPixel(x, y, Color.White);
+				}
 			}
+			
+			framebuffer.g1.end();
+		}
+		else
+		{
+			framebuffer.g2.begin();		
+			
+			for (y in 0...lines)
+			{
+				for (x in 0...cols)
+				{
+					if (activeTable[y][x])
+						framebuffer.g2.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+				}
+			}						
 		}
 		
+		if (cellSize == 1)
+			framebuffer.g2.begin(false);
+		
+		framebuffer.g2.color = Color.Black;
+		framebuffer.g2.fillRect(0, 0, 90, 30);
+		
+		framebuffer.g2.color = Color.White;
+		framebuffer.g2.font = Assets.fonts.Vera;
+		framebuffer.g2.fontSize = 25;		
+		framebuffer.g2.drawString('FPS: ${fps.fps}', 1, 3);		
+		
 		framebuffer.g2.end();
-	}
-	
-	function renderWithG1(framebuffer: Framebuffer): Void 
-	{
-		framebuffer.g2.begin();
-		framebuffer.g2.end();
 		
-		framebuffer.g1.begin();
+		if (panel.show)
+			panel.render(framebuffer.g2);
 		
-		for (y in 0...lines)
-		{
-			for (x in 0...cols)
-			{
-				if (activeTable[y][x])
-					framebuffer.g1.setPixel(x, y, Color.White);
-			}
-		}
-		
-		framebuffer.g1.end();
+		fps.calcFrames();
 	}
 }
